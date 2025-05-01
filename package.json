@@ -1,0 +1,16 @@
+{
+  "name": "bpmn-viewer",
+  "version": "1.0.0",
+  "description": "BPMN 2.0 Diagram Viewer",
+  "main": "index.html",
+  "scripts": {
+    "download-deps": "node download-dependencies.js"
+  },
+  "dependencies": {
+    "fs-extra": "^10.1.0",
+    "mkdirp": "^1.0.4",
+    "node-fetch": "^2.6.7"
+  },
+  "author": "",
+  "license": "MIT"
+} 

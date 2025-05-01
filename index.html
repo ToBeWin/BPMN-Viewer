@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline';">
+  <title>BPMN Viewer</title>
+  <!-- Local Bootstrap 5 CSS -->
+  <link href="lib/bootstrap/bootstrap.min.css" rel="stylesheet">
+  <!-- Local Font Awesome -->
+  <link rel="stylesheet" href="lib/fontawesome/all.min.css">
+  <!-- Local Ace Editor -->
+  <script src="lib/ace/ace.js"></script>
+  <script src="lib/ace/mode/xml.js"></script>
+  <script src="lib/ace/theme/github.js"></script>
+  <script src="lib/ace/theme/tomorrow_night.js"></script>
+  <script src="lib/ace/theme/textmate.js"></script>
+  <!-- Local BPMN-JS CSS -->
+  <link rel="stylesheet" href="lib/bpmn-js/assets/diagram-js.css">
+  <link rel="stylesheet" href="lib/bpmn-js/assets/bpmn-font/css/bpmn.css">
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --secondary-color: #2c3e50;
+      --background-color: #ffffff;
+      --surface-color: #f8f9fa;
+      --border-color: #dee2e6;
+      --text-color: #212529;
+      --muted-text-color: #6c757d;
+      --canvas-background: #f8f9fa;
+      --card-background: #ffffff;
+      --nav-background: #f8f9fa;
+      --footer-background: #f8f9fa;
+      --editor-background: #ffffff;
+    }
+
+    [data-theme="dark"] {
+      --primary-color: #3498db;
+      --secondary-color: #34495e;
+      --background-color: #121212;
+      --surface-color: #1e1e1e;
+      --border-color: #2d2d2d;
+      --text-color: #e0e0e0;
+      --muted-text-color: #adb5bd;
+      --canvas-background: #1e1e1e;
+      --card-background: #252525;
+      --nav-background: #252525;
+      --footer-background: #252525;
+      --editor-background: #1e1e1e;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    body { 
+      background-color: var(--background-color); 
+      color: var(--text-color);
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .navbar {
+      background-color: var(--nav-background) !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 0.25rem 0.5rem;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1050;
+    }
+
+    /* 确保下拉菜单显示在最上层 */
+    .dropdown-menu {
+      z-index: 1060 !important;
+      background-color: var(--card-background);
+      border-color: var(--border-color);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .dropdown-item {
+      color: var(--text-color);
+    }
+
+    .dropdown-item:hover {
+      background-color: var(--surface-color);
+      color: var(--text-color);
+    }
+
+    .dropdown-divider {
+      border-color: var(--border-color);
+    }
+    
+    .card {
+      background-color: var(--card-background);
+      border-color: var(--border-color);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      transition: all 0.3s ease;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .card:hover {
+      box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+    }
+
+    .card-body {
+      padding: 1rem;
+      flex: 1;
+      overflow: auto;
+    }
+
+    .card-header {
+      background-color: rgba(0,0,0,0.03);
+      font-weight: 600;
+      color: var(--text-color);
+      padding: 0.25rem 0.5rem;
+    }
+
+    .btn-primary {
+      background-color: var(--primary-color);
+      border-color: var(--primary-color);
+    }
+
+    .btn-outline-secondary {
+      color: var(--secondary-color);
+      border-color: var(--secondary-color);
+    }
+
+    #canvas { 
+      height: calc(100% - 2rem); 
+      border: 1px solid var(--border-color); 
+      background: var(--canvas-background); 
+      transition: all 0.3s ease;
+    }
+    
+    #xmlEditor { 
+      height: calc(100% - 2rem); 
+      border-radius: 0 0 0.25rem 0.25rem;
+    }
+    
+    .zoom-controls { 
+      position: absolute; 
+      top: 10px; 
+      right: 10px; 
+      z-index: 100; 
+    }
+    
+    .zoom-controls button { 
+      margin: 0 2px; 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+      background-color: var(--card-background);
+      color: var(--text-color);
+      padding: 0.25rem 0.5rem;
+    }
+
+    footer {
+      background-color: var(--footer-background) !important;
+      color: var(--text-color);
+      padding: 0.25rem !important;
+      flex-shrink: 0;
+    }
+    
+    /* Hide original lane labels */
+    .djs-label[data-element-id*="Lane_"], .djs-label[data-element-id*="Participant_"] {
+      display: none !important;
+    }
+    
+    /* Custom lane label style */
+    .custom-lane-label {
+      text-anchor: middle;
+      dominant-baseline: middle;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 12px;
+      fill: var(--text-color);
+    }
+
+    .navbar-brand {
+      font-weight: 600;
+      color: var(--primary-color) !important;
+    }
+
+    .btn {
+      height: 38px;
+      padding: 0.5rem 1.25rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      gap: 0.5rem;
+      border: 1px solid var(--border-color);
+      background: var(--card-background);
+      color: var(--text-color);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+    }
+
+    .btn i {
+      font-size: 0.9em;
+    }
+
+    .btn-primary {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-color);
+      filter: brightness(110%);
+      color: white;
+    }
+
+    .btn-outline-secondary {
+      background: transparent;
+      border-color: var(--border-color);
+      color: var(--text-color);
+    }
+
+    .btn-outline-secondary:hover {
+      background: var(--surface-color);
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+    }
+
+    /* File input styling */
+    .input-group {
+      position: relative;
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: stretch;
+      width: 100%;
+      background: var(--card-background);
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      transition: all 0.2s ease;
+    }
+
+    .input-group:hover {
+      border-color: var(--primary-color);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .input-group:focus-within {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    }
+
+    .form-control[type="file"] {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .file-label {
+      flex: 1;
+      height: 38px;
+      padding: 0.5rem 1.25rem;
+      color: var(--text-color);
+      background: transparent;
+      border: none;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-radius: 6px 0 0 6px;
+    }
+
+    .input-group .btn {
+      margin: -1px;
+      border-radius: 0 6px 6px 0;
+      border: 1px solid var(--border-color);
+    }
+
+    /* Card and layout adjustments */
+    .card {
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: var(--card-background);
+      transition: all 0.3s ease;
+    }
+
+    .card-header {
+      background: transparent;
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem;
+      font-weight: 600;
+    }
+
+    .card-body {
+      padding: 1rem;
+    }
+
+    .form-label {
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+      color: var(--text-color);
+    }
+
+    /* Action buttons group */
+    .d-grid.gap-2 {
+      display: grid;
+      gap: 0.75rem !important;
+    }
+
+    .d-grid.gap-2 .btn {
+      width: 100%;
+    }
+
+    /* Theme-specific adjustments */
+    [data-theme="dark"] .btn {
+      border-color: var(--border-color);
+    }
+
+    [data-theme="dark"] .btn:hover {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    [data-theme="dark"] .input-group {
+      box-shadow: none;
+    }
+
+    [data-theme="dark"] .input-group:hover {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    [data-theme="dark"] .input-group:focus-within {
+      box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
+    }
+
+    /* Navbar adjustments */
+    .navbar {
+      padding: 0.75rem 1rem;
+      background: var(--nav-background);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .navbar .btn {
+      height: 34px;
+      padding: 0.375rem 1rem;
+    }
+
+    /* Message styling */
+    #message {
+      padding: 0.5rem;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    /* More compact layout */
+    .container-fluid {
+      padding: 0.25rem 0.5rem;
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .row {
+      margin: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    .col-lg-3, .col-lg-9 {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .mb-3 {
+      margin-bottom: 1rem !important;
+    }
+    
+    .form-control {
+      padding: 0.25rem 0.375rem;
+    }
+
+    /* Apply theme to Ace editor */
+    .ace-github, .ace-tomorrow-night {
+      background-color: var(--editor-background) !important;
+    }
+
+    /* Make sure the gutter also gets themed */
+    .ace_gutter {
+      background-color: var(--editor-background) !important;
+      color: var(--text-color) !important;
+    }
+
+    .actions-toolbar {
+      padding: 4px;
+      border-radius: 4px;
+      background-color: var(--surface-color);
+      margin-bottom: 8px;
+    }
+
+    .theme-switch {
+      cursor: pointer;
+    }
+
+    /* BPMN diagram dark theme adjustments */
+    [data-theme="dark"] .djs-container {
+      background-color: var(--canvas-background) !important;
+    }
+
+    [data-theme="dark"] .djs-shape {
+      fill: #2a2a2a;
+      stroke: #e0e0e0;
+    }
+
+    [data-theme="dark"] .djs-connection {
+      stroke: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-connection .djs-visual path {
+      stroke: #e0e0e0 !important;
+      marker-end: url(#sequenceflow-end-dark) !important;
+    }
+
+    [data-theme="dark"] .djs-connection.djs-hover .djs-visual path {
+      stroke: var(--primary-color) !important;
+    }
+
+    [data-theme="dark"] .djs-shape .djs-visual > :nth-child(1) {
+      fill: #2a2a2a;
+      stroke: #e0e0e0;
+    }
+
+    [data-theme="dark"] .djs-shape.djs-hover .djs-visual > :nth-child(1) {
+      fill: #3a3a3a;
+      stroke: var(--primary-color);
+    }
+
+    [data-theme="dark"] .djs-shape .djs-visual text {
+      fill: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-connection .djs-visual polyline {
+      stroke: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-connection.djs-hover .djs-visual polyline {
+      stroke: var(--primary-color) !important;
+    }
+
+    [data-theme="dark"] .djs-context-pad {
+      background-color: #2a2a2a;
+      border-color: #404040;
+    }
+
+    [data-theme="dark"] .djs-context-pad .entry {
+      background-color: #2a2a2a;
+      color: #e0e0e0;
+      box-shadow: 0 0 2px rgba(255, 255, 255, 0.2);
+    }
+
+    [data-theme="dark"] .djs-context-pad .entry:hover {
+      background-color: #3a3a3a;
+    }
+
+    [data-theme="dark"] .djs-overlay-context-pad {
+      background-color: #2a2a2a;
+      border-color: #404040;
+    }
+
+    [data-theme="dark"] .djs-overlay {
+      background-color: rgba(42, 42, 42, 0.9);
+      color: #e0e0e0;
+      border-color: #404040;
+    }
+
+    [data-theme="dark"] .djs-palette {
+      background-color: #2a2a2a;
+      border-color: #404040;
+    }
+
+    [data-theme="dark"] .djs-palette .entry {
+      color: #e0e0e0;
+    }
+
+    [data-theme="dark"] .djs-palette .entry:hover {
+      background-color: #3a3a3a;
+    }
+
+    [data-theme="dark"] .djs-popup {
+      background-color: #2a2a2a;
+      border-color: #404040;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    [data-theme="dark"] .djs-popup-header {
+      background-color: #3a3a3a;
+      border-color: #404040;
+    }
+
+    [data-theme="dark"] .djs-popup-body {
+      background-color: #2a2a2a;
+    }
+
+    [data-theme="dark"] .djs-popup .entry {
+      color: #e0e0e0;
+    }
+
+    [data-theme="dark"] .djs-popup .entry:hover {
+      background-color: #3a3a3a;
+    }
+
+    /* Custom markers for dark theme */
+    [data-theme="dark"] .djs-container svg defs {
+      position: absolute;
+      height: 0;
+      width: 0;
+    }
+
+    [data-theme="dark"] .djs-container svg defs marker path {
+      fill: #e0e0e0 !important;
+    }
+
+    /* Custom lane label styling for dark theme */
+    [data-theme="dark"] .custom-lane-label text {
+      fill: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .custom-lane-label rect {
+      fill: #2a2a2a !important;
+      stroke: #404040 !important;
+    }
+
+    /* Event circle styling for dark theme */
+    [data-theme="dark"] .djs-visual circle {
+      fill: #2a2a2a !important;
+      stroke: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-visual circle.djs-hover {
+      stroke: var(--primary-color) !important;
+    }
+
+    /* Gateway diamond styling for dark theme */
+    [data-theme="dark"] .djs-visual polygon,
+    [data-theme="dark"] .djs-visual path[d*="M16 1v14M7.5 8h17"] {
+      fill: #2a2a2a !important;
+      stroke: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-visual polygon.djs-hover,
+    [data-theme="dark"] .djs-visual path[d*="M16 1v14M7.5 8h17"].djs-hover {
+      stroke: var(--primary-color) !important;
+    }
+
+    /* Task rectangle styling for dark theme */
+    [data-theme="dark"] .djs-visual rect {
+      fill: #2a2a2a !important;
+      stroke: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-visual rect.djs-hover {
+      stroke: var(--primary-color) !important;
+    }
+
+    /* Selection styling for dark theme */
+    [data-theme="dark"] .djs-visual.selected {
+      stroke: var(--primary-color) !important;
+    }
+
+    [data-theme="dark"] .djs-shape.selected .djs-visual > :nth-child(1) {
+      stroke: var(--primary-color) !important;
+    }
+
+    /* Connection styling for dark theme */
+    [data-theme="dark"] .djs-connection-hit {
+      stroke: transparent !important;
+      stroke-width: 15px !important;
+    }
+
+    [data-theme="dark"] .djs-bendpoint {
+      fill: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-segment-dragger {
+      fill: #e0e0e0 !important;
+      stroke: #e0e0e0 !important;
+    }
+
+    [data-theme="dark"] .djs-bendpoint:hover,
+    [data-theme="dark"] .djs-segment-dragger:hover {
+      fill: var(--primary-color) !important;
+      stroke: var(--primary-color) !important;
+    }
+  </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+  <nav class="navbar navbar-expand-lg navbar-light">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">
+        <i class="fas fa-project-diagram me-2"></i>
+        <span data-i18n="app.title">BPMN Viewer</span>
+      </a>
+      <div class="ms-auto d-flex align-items-center">
+        <button class="btn btn-sm btn-outline-secondary me-3" id="languageToggle">
+          <i class="fas fa-globe me-1"></i>
+          <span id="currentLanguage">English</span>
+        </button>
+        <div class="theme-switch" id="themeToggle">
+          <i class="fas fa-moon" id="darkIcon"></i>
+          <i class="fas fa-sun d-none" id="lightIcon"></i>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid my-4 flex-grow-1">
+    <div class="row g-3">
+      <div class="col-lg-3">
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span data-i18n="editor.title">XML Editor</span>
+            <div class="form-check form-switch ms-auto">
+              <input class="form-check-input" type="checkbox" id="syntaxHighlightToggle" checked>
+              <label class="form-check-label" for="syntaxHighlightToggle" data-i18n="editor.syntax">Syntax</label>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="xmlEditor" class="form-control"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header" data-i18n="actions.title">Actions</div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label for="fileInput" class="form-label" data-i18n="actions.select">Select BPMN file</label>
+              <div class="input-group">
+                <input class="form-control" type="file" id="fileInput" accept=".xml,.bpmn" data-i18n-placeholder="actions.select">
+                <label class="form-control file-label" for="fileInput" data-i18n="actions.noFileSelected">No file chosen</label>
+                <button class="btn btn-outline-secondary" type="button" id="loadBtn" data-i18n="actions.load">
+                  <i class="fas fa-upload me-1"></i>
+                  <span>Load & Validate</span>
+                </button>
+              </div>
+            </div>
+            <div id="message" class="mt-2 text-danger"></div>
+            <hr>
+            <div class="d-grid gap-2">
+              <button class="btn btn-outline-secondary" id="exportSvgBtn">
+                <i class="fas fa-file-export me-1"></i>
+                <span data-i18n="actions.exportSvg">Export SVG</span>
+              </button>
+              <button class="btn btn-outline-secondary" id="exportPngBtn">
+                <i class="fas fa-file-image me-1"></i>
+                <span data-i18n="actions.exportPng">Export PNG</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-9">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span data-i18n="diagram.title">Diagram Preview</span>
+          </div>
+          <div class="card-body position-relative">
+            <div class="zoom-controls">
+              <button class="btn btn-sm zoom-in" title="Zoom In">
+                <i class="fas fa-search-plus"></i>
+              </button>
+              <button class="btn btn-sm zoom-out" title="Zoom Out">
+                <i class="fas fa-search-minus"></i>
+              </button>
+              <button class="btn btn-sm zoom-reset" title="Reset View">
+                <i class="fas fa-expand"></i>
+              </button>
+            </div>
+            <div id="canvas"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="py-3 text-center">
+    <small data-i18n="app.footer">Powered by bpmn-js & bpmn-moddle</small>
+  </footer>
+
+  <!-- Local Bootstrap JS Bundle -->
+  <script src="lib/bootstrap/bootstrap.bundle.min.js"></script>
+  
+  <!-- Local BPMN JS -->
+  <script src="lib/bpmn-js/bpmn-navigated-viewer.production.min.js"></script>
+  
+  <!-- Application JS -->
+  <script src="app.js"></script>
+</body>
+</html>
