@@ -14,6 +14,8 @@ const translations = {
     'actions.exportPng': 'Export PNG',
     'diagram.title': 'Diagram Preview',
     'message.selectFile': 'Please select an XML or BPMN file',
+    'actions.chooseFile': 'Choose file',
+    'actions.noFileChosen': 'No file chosen',
     'message.invalidFormat': 'Invalid file format. Only .xml and .bpmn files are supported.',
     'message.invalidBPMN': 'Invalid BPMN 2.0 format: ',
     'message.parseError': 'Parse error: ',
@@ -34,6 +36,8 @@ const translations = {
     'actions.exportPng': '导出 PNG',
     'diagram.title': '流程图预览',
     'message.selectFile': '请选择 XML 或 BPMN 文件',
+    'actions.chooseFile': '选择文件',
+    'actions.noFileChosen': '未选择文件',
     'message.invalidFormat': '文件格式无效。仅支持 .xml 和 .bpmn 文件。',
     'message.invalidBPMN': 'BPMN 2.0 格式无效：',
     'message.parseError': '解析失败：',
@@ -146,21 +150,10 @@ function setLanguage(lang) {
     }
   });
 
-  // Update file input placeholder and button text
-  const fileInput = document.getElementById('fileInput');
-  if (fileInput) {
-    const placeholderKey = fileInput.getAttribute('data-i18n-placeholder');
-    if (placeholderKey && translations[lang][placeholderKey]) {
-      fileInput.setAttribute('placeholder', translations[lang][placeholderKey]);
-      // Update the file input button text
-      const buttonText = translations[lang]['actions.selectFileButton'] || 'Choose file';
-      fileInput.setAttribute('title', buttonText);
-      // Update the file input label
-      const label = fileInput.nextElementSibling;
-      if (label && label.classList.contains('form-control')) {
-        label.textContent = buttonText;
-      }
-    }
+  // Update file status if no file is selected
+  const fileStatus = document.getElementById('fileStatus');
+  if (fileStatus && !fileState.selectedFile) {
+    fileStatus.textContent = translations[lang]['actions.noFileChosen'];
   }
   
   document.getElementById('currentLanguage').textContent = lang === 'en' ? 'English' : '中文';
@@ -266,13 +259,13 @@ const fileState = {
     this.selectedFile = null;
     this.isProcessing = false;
     const fileInput = document.getElementById('fileInput');
-    const fileLabel = document.querySelector('.file-label');
+    const fileStatus = document.getElementById('fileStatus');
     const loadBtn = document.getElementById('loadBtn');
     const msg = document.getElementById('message');
     const currentLang = document.documentElement.lang || 'en';
     
     if (fileInput) fileInput.value = '';
-    if (fileLabel) fileLabel.textContent = translations[currentLang]['actions.noFileSelected'];
+    if (fileStatus) fileStatus.textContent = translations[currentLang]['actions.noFileChosen'];
     if (loadBtn) loadBtn.disabled = true;
     if (msg) {
       msg.textContent = '';
@@ -345,6 +338,16 @@ document.addEventListener('DOMContentLoaded', function() {
   setLanguage(savedLanguage);
   setTheme(savedTheme);
   
+  // 初始化文件状态显示 - 强制设置
+  setTimeout(() => {
+    const fileStatus = document.getElementById('fileStatus');
+    if (fileStatus && !fileState.selectedFile) {
+      fileStatus.textContent = translations[savedLanguage]['actions.noFileChosen'];
+      fileStatus.setAttribute('data-i18n', 'actions.noFileChosen');
+      console.log('初始化文件状态:', translations[savedLanguage]['actions.noFileChosen']);
+    }
+  }, 100);
+  
   // Check if running in Chrome extension context
   if (typeof chrome !== 'undefined' && chrome.storage) {
     chrome.storage.sync.get(['theme', 'language'], function(result) {
@@ -357,6 +360,15 @@ document.addEventListener('DOMContentLoaded', function() {
       if (result.language) {
         savedLanguage = result.language;
         setLanguage(savedLanguage);
+        // 重新设置文件状态显示 - 强制更新
+        setTimeout(() => {
+          const fileStatus = document.getElementById('fileStatus');
+          if (fileStatus && !fileState.selectedFile) {
+            fileStatus.textContent = translations[savedLanguage]['actions.noFileChosen'];
+            fileStatus.setAttribute('data-i18n', 'actions.noFileChosen');
+            console.log('Chrome扩展环境文件状态:', translations[savedLanguage]['actions.noFileChosen']);
+          }
+        }, 100);
       }
     });
   }
@@ -451,11 +463,10 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // File input change handler
   const fileInput = document.getElementById('fileInput');
-  const fileLabel = document.querySelector('.file-label');
   const loadBtn = document.getElementById('loadBtn');
   const msg = document.getElementById('message');
 
-  if (fileInput && fileLabel) {
+  if (fileInput) {
     // Reset initial state
     fileState.reset();
     
@@ -470,15 +481,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const file = this.files[0];
         const extension = file.name.toLowerCase().split('.').pop();
         
-        // Check file extension
-        if (!['xml', 'bpmn'].includes(extension)) {
-          msg.textContent = translations[currentLang]['message.invalidFormat'];
-          fileState.reset();
-          return;
-        }
+        // 移除文件扩展名检查，允许任何后缀的文件，只要内容是有效的BPMN格式
         
         fileState.selectedFile = file;
-        fileLabel.textContent = file.name;
+        const fileStatus = document.getElementById('fileStatus');
+        if (fileStatus) fileStatus.textContent = file.name;
         loadBtn.disabled = false;
       } else {
         fileState.reset();
@@ -503,9 +510,20 @@ document.addEventListener('DOMContentLoaded', function() {
       const reader = new FileReader();
       reader.onload = async () => {
         try {
-          await loadDiagram(reader.result, viewer, canvas);
+          let xmlContent = reader.result;
+          
+          // 检查是否是Web服务响应格式，如果是则提取BPMN内容
+          if (xmlContent.includes('getProcessResponse') || xmlContent.includes('_tns_:')) {
+            const definitionsMatch = xmlContent.match(/<definitions[\s\S]*?<\/definitions>/i);
+            if (definitionsMatch) {
+              xmlContent = definitionsMatch[0];
+            }
+          }
+          
+          await loadDiagram(xmlContent, viewer, canvas);
         } catch (e) {
           console.error('Failed to load diagram:', e);
+          msg.textContent = 'Parse error: ' + e.message;
           fileState.reset();
         }
       };
@@ -609,4 +627,87 @@ document.addEventListener('DOMContentLoaded', function() {
   eventBus.on(['canvas.viewbox.changed', 'canvas.resized'], function() {
     setTimeout(adjustLaneLabels, 50);
   });
+
+  // Fullscreen functionality
+  const xmlFullscreenBtn = document.getElementById('xmlFullscreenBtn');
+  const diagramFullscreenBtn = document.getElementById('diagramFullscreenBtn');
+
+  // XML Editor fullscreen
+  xmlFullscreenBtn.addEventListener('click', () => {
+    const xmlEditorCard = xmlFullscreenBtn.closest('.card');
+    toggleFullscreen(xmlEditorCard, 'xml');
+  });
+
+  // Diagram fullscreen
+  diagramFullscreenBtn.addEventListener('click', () => {
+    const diagramCard = diagramFullscreenBtn.closest('.card');
+    toggleFullscreen(diagramCard, 'diagram');
+  });
+
+  function toggleFullscreen(element, type) {
+    const existingOverlay = document.querySelector('.fullscreen-overlay');
+    
+    if (existingOverlay) {
+      // Exit fullscreen
+      const originalParent = existingOverlay.originalParent;
+      const originalNextSibling = existingOverlay.originalNextSibling;
+      
+      if (originalNextSibling) {
+        originalParent.insertBefore(element, originalNextSibling);
+      } else {
+        originalParent.appendChild(element);
+      }
+      
+      document.body.removeChild(existingOverlay);
+      
+      // Update button icon
+      const btn = type === 'xml' ? xmlFullscreenBtn : diagramFullscreenBtn;
+      btn.innerHTML = '<i class="fas fa-expand"></i>';
+      
+      // Resize editor/viewer
+      setTimeout(() => {
+        if (type === 'xml') {
+          xmlEditor.resize();
+        } else {
+          if (canvas && canvas.zoom) {
+            canvas.zoom('fit-viewport');
+          }
+        }
+      }, 200);
+    } else {
+      // Enter fullscreen
+      const overlay = document.createElement('div');
+      overlay.className = 'fullscreen-overlay';
+      overlay.originalParent = element.parentNode;
+      overlay.originalNextSibling = element.nextSibling;
+      
+      // Move element to fullscreen
+      overlay.appendChild(element);
+      document.body.appendChild(overlay);
+      
+      // Update button icon
+      const btn = type === 'xml' ? xmlFullscreenBtn : diagramFullscreenBtn;
+      btn.innerHTML = '<i class="fas fa-compress"></i>';
+      
+      // Add ESC key listener
+      const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+          toggleFullscreen(element, type);
+          document.removeEventListener('keydown', handleEscape);
+        }
+      };
+      document.addEventListener('keydown', handleEscape);
+      
+      // Resize editor/viewer
+      setTimeout(() => {
+        if (type === 'xml') {
+          xmlEditor.resize();
+        } else {
+          if (canvas && canvas.zoom) {
+            canvas.zoom('fit-viewport');
+          }
+        }
+      }, 200);
+    }
+  }
 }); 

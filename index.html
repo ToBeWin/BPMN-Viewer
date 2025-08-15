@@ -258,34 +258,10 @@
     }
 
     .form-control[type="file"] {
-      position: absolute;
-      opacity: 0;
-      width: 100%;
-      height: 100%;
-      cursor: pointer;
-      z-index: 2;
+      border-radius: 6px;
     }
 
-    .file-label {
-      flex: 1;
-      height: 38px;
-      padding: 0.5rem 1.25rem;
-      color: var(--text-color);
-      background: transparent;
-      border: none;
-      display: flex;
-      align-items: center;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      border-radius: 6px 0 0 6px;
-    }
 
-    .input-group .btn {
-      margin: -1px;
-      border-radius: 0 6px 6px 0;
-      border: 1px solid var(--border-color);
-    }
 
     /* Card and layout adjustments */
     .card {
@@ -541,6 +517,48 @@
       stroke: #404040 !important;
     }
 
+    /* File status styling */
+    #fileStatus {
+      color: var(--muted-text-color);
+      font-size: 0.875rem;
+    }
+
+    /* Fullscreen styles */
+    .fullscreen-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: var(--background-color);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .fullscreen-overlay .card {
+      height: 100%;
+      margin: 0;
+      border-radius: 0;
+    }
+
+    .fullscreen-overlay .card-body {
+      flex: 1;
+      padding: 0;
+    }
+
+    .fullscreen-overlay #xmlEditor {
+      height: 100% !important;
+      border: none;
+      border-radius: 0;
+    }
+
+    .fullscreen-overlay #canvas {
+      height: 100% !important;
+      border: none;
+      border-radius: 0;
+    }
+
     /* Event circle styling for dark theme */
     [data-theme="dark"] .djs-visual circle {
       fill: #2a2a2a !important;
@@ -630,9 +648,14 @@
         <div class="card mb-3">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span data-i18n="editor.title">XML Editor</span>
-            <div class="form-check form-switch ms-auto">
-              <input class="form-check-input" type="checkbox" id="syntaxHighlightToggle" checked>
-              <label class="form-check-label" for="syntaxHighlightToggle" data-i18n="editor.syntax">Syntax</label>
+            <div class="d-flex align-items-center">
+              <button class="btn btn-sm btn-outline-secondary me-2" id="xmlFullscreenBtn" title="Fullscreen">
+                <i class="fas fa-expand"></i>
+              </button>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="syntaxHighlightToggle" checked>
+                <label class="form-check-label" for="syntaxHighlightToggle" data-i18n="editor.syntax">Syntax</label>
+              </div>
             </div>
           </div>
           <div class="card-body p-0">
@@ -643,15 +666,15 @@
           <div class="card-header" data-i18n="actions.title">Actions</div>
           <div class="card-body">
             <div class="mb-3">
-              <label for="fileInput" class="form-label" data-i18n="actions.select">Select BPMN file</label>
-              <div class="input-group">
-                <input class="form-control" type="file" id="fileInput" accept=".xml,.bpmn" data-i18n-placeholder="actions.select">
-                <label class="form-control file-label" for="fileInput" data-i18n="actions.noFileSelected">No file chosen</label>
-                <button class="btn btn-outline-secondary" type="button" id="loadBtn" data-i18n="actions.load">
-                  <i class="fas fa-upload me-1"></i>
-                  <span>Load & Validate</span>
-                </button>
+              <div class="form-label" data-i18n="actions.select">Select BPMN file</div>
+              <div class="mb-2">
+                <input class="form-control" type="file" id="fileInput" data-i18n-placeholder="actions.select">
               </div>
+              <div class="small mb-2" id="fileStatus">未选择文件</div>
+              <button class="btn btn-outline-secondary w-100" type="button" id="loadBtn" data-i18n="actions.load">
+                <i class="fas fa-upload me-1"></i>
+                <span>Load & Validate</span>
+              </button>
             </div>
             <div id="message" class="mt-2 text-danger"></div>
             <hr>
@@ -672,6 +695,9 @@
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span data-i18n="diagram.title">Diagram Preview</span>
+            <button class="btn btn-sm btn-outline-secondary" id="diagramFullscreenBtn" title="Fullscreen">
+              <i class="fas fa-expand"></i>
+            </button>
           </div>
           <div class="card-body position-relative">
             <div class="zoom-controls">
