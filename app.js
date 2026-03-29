@@ -60,13 +60,14 @@ const translations = {
   }
 };
 
+// Disable Web Workers for Chrome Extension CSP compatibility BEFORE any initialization
+ace.config.set('useWorker', false);
+
 // Initialize Ace Editor for XML
 const xmlEditor = ace.edit('xmlEditor');
+xmlEditor.session.setOption("useWorker", false); // Force disable on session level
 xmlEditor.session.setMode('ace/mode/xml');
 xmlEditor.setTheme('ace/theme/github');
-
-// Disable Web Workers for Chrome Extension CSP compatibility
-ace.config.set('useWorker', false);
 
 // Theme management
 function setTheme(theme) {
@@ -835,6 +836,8 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         xmlEditor.session.setMode('ace/mode/text');
       }
+      // Re-enforce no-worker policy after mode switch
+      xmlEditor.session.setOption("useWorker", false);
     });
   }
   
