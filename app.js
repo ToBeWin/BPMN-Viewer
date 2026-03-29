@@ -65,25 +65,8 @@ const xmlEditor = ace.edit('xmlEditor');
 xmlEditor.session.setMode('ace/mode/xml');
 xmlEditor.setTheme('ace/theme/github');
 
-// Configure Ace to use blob URLs for workers instead of direct script loading
-ace.config.set('workerPath', null);
-ace.config.setModuleUrl("ace/mode/xml_worker", URL.createObjectURL(new Blob([`
-  importScripts("${window.location.origin}/lib/ace/ace.js");
-  define("ace/mode/xml_worker",["require","exports","module","ace/lib/oop","ace/worker/mirror"], function(require, exports, module) {
-    "use strict";
-    var oop = require("../lib/oop");
-    var Mirror = require("../worker/mirror").Mirror;
-    var XmlWorker = function(sender) { Mirror.call(this, sender); this.setTimeout(200); };
-    oop.inherits(XmlWorker, Mirror);
-    (function() {
-      this.onUpdate = function() { var value = this.doc.getValue(); var errors = []; this.sender.emit("annotate", errors); };
-    }).call(XmlWorker.prototype);
-    exports.XmlWorker = XmlWorker;
-  });
-`], {type: "application/javascript"})));
-
-// Set useWorker to true
-ace.config.set('useWorker', true);
+// Disable Web Workers for Chrome Extension CSP compatibility
+ace.config.set('useWorker', false);
 
 // Theme management
 function setTheme(theme) {
