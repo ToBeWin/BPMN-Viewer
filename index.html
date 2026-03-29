@@ -132,7 +132,8 @@
     }
 
     #canvas { 
-      height: calc(100% - 2rem); 
+      height: 100%;
+      min-height: 400px;
       border: 1px solid var(--border-color); 
       background: var(--canvas-background); 
       transition: all 0.3s ease;
@@ -759,7 +760,7 @@
               <i class="fas fa-expand"></i>
             </button>
           </div>
-          <div class="card-body p-0 position-relative">
+          <div class="card-body p-0 position-relative d-flex flex-column">
             <div class="zoom-controls">
               <button class="btn btn-sm zoom-in" title="Zoom In" data-i18n-title="actions.zoomIn">
                 <i class="fas fa-plus"></i>
@@ -771,7 +772,7 @@
                 <i class="fas fa-minus"></i>
               </button>
             </div>
-            <div id="canvas"></div>
+            <div id="canvas" class="flex-grow-1 w-100"></div>
           </div>
         </div>
       </div>
