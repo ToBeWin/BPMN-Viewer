@@ -60,8 +60,6 @@ BPMN Viewer is a lightweight, user-friendly web application for viewing and vali
 - Local storage for user preferences
 
 ![alt text](images/1.png)
-![alt text](images/2.png)
-![alt text](images/3.png)
 ---
 
 ## 中文
