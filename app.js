@@ -18,6 +18,7 @@ const translations = {
     'actions.noFileChosen': 'No file chosen',
     'message.invalidFormat': 'Invalid file format. Only .xml and .bpmn files are supported.',
     'message.invalidBPMN': 'Invalid BPMN 2.0 format: ',
+    'message.noDiagram': 'This BPMN file has no diagram layout data and cannot be previewed.',
     'message.parseError': 'Parse error: ',
     'message.exportSvgError': 'SVG export failed: ',
     'message.exportPngError': 'PNG export failed: ',
@@ -47,6 +48,7 @@ const translations = {
     'actions.noFileChosen': '未选择文件',
     'message.invalidFormat': '文件格式无效。仅支持 .xml 和 .bpmn 文件。',
     'message.invalidBPMN': 'BPMN 2.0 格式无效：',
+    'message.noDiagram': '该 BPMN 文件缺少流程图布局数据，无法预览。',
     'message.parseError': '解析失败：',
     'message.exportSvgError': '导出SVG失败：',
     'message.exportPngError': '导出PNG失败：',
@@ -280,8 +282,17 @@ async function validateBPMN(xml) {
 const fileState = {
   selectedFile: null,
   isProcessing: false,
-  reset() {
-    this.selectedFile = null;
+  reset(options = {}) {
+    const {
+      clearSelection = true,
+      clearMessage = true,
+      disableLoad = true
+    } = options;
+
+    if (clearSelection) {
+      this.selectedFile = null;
+    }
+
     this.isProcessing = false;
     const fileInput = document.getElementById('fileInput');
     const fileStatus = document.getElementById('fileStatus');
@@ -289,10 +300,10 @@ const fileState = {
     const msg = document.getElementById('message');
     const currentLang = document.documentElement.lang || 'en';
     
-    if (fileInput) fileInput.value = '';
-    if (fileStatus) fileStatus.textContent = translations[currentLang]['actions.noFileChosen'];
-    if (loadBtn) loadBtn.disabled = true;
-    if (msg) {
+    if (clearSelection && fileInput) fileInput.value = '';
+    if (clearSelection && fileStatus) fileStatus.textContent = translations[currentLang]['actions.noFileChosen'];
+    if (loadBtn) loadBtn.disabled = disableLoad;
+    if (clearMessage && msg) {
       msg.textContent = '';
       msg.className = 'mt-2';
     }
@@ -349,9 +360,6 @@ async function loadDiagram(xml, viewer, canvas) {
       msg.textContent = result.warnings.map(w => w.message).join('\n');
     }
     
-    // Reset file state after successful load
-    fileState.reset();
-    
     // Save to local storage for workspace memory
     try {
       localStorage.setItem('bpmn-viewer-last-content', xml);
@@ -363,8 +371,18 @@ async function loadDiagram(xml, viewer, canvas) {
     setTimeout(adjustLaneLabels, 200);
     setTimeout(adjustLaneLabels, 500);
   } catch (e) {
-    msg.textContent = translations[currentLang]['message.invalidBPMN'] + e.message;
-    fileState.reset();
+    const missingDiagram =
+      e.message.includes('no diagram to display') ||
+      (!xml.includes('BPMNDiagram') && !xml.includes('bpmndi:BPMNDiagram'));
+
+    msg.textContent = missingDiagram
+      ? translations[currentLang]['message.noDiagram']
+      : translations[currentLang]['message.invalidBPMN'] + e.message;
+    fileState.reset({
+      clearSelection: false,
+      clearMessage: false,
+      disableLoad: false
+    });
     throw e;
   } finally {
     fileState.isProcessing = false;
@@ -651,13 +669,23 @@ document.addEventListener('DOMContentLoaded', function() {
             await loadDiagram(xmlContent, viewer, canvas);
           } catch (err) {
             console.error('Failed to load diagram:', err);
-            msg.textContent = 'Parse error: ' + err.message;
-            fileState.reset();
+            msg.textContent = translations[currentLang]['message.parseError'] + err.message;
+            msg.className = 'mt-2 text-danger';
+            fileState.reset({
+              clearSelection: false,
+              clearMessage: false,
+              disableLoad: false
+            });
           }
         };
         reader.onerror = () => {
           msg.textContent = translations[currentLang]['message.parseError'] + 'Failed to read file';
-          fileState.reset();
+          msg.className = 'mt-2 text-danger';
+          fileState.reset({
+            clearSelection: false,
+            clearMessage: false,
+            disableLoad: false
+          });
         };
         reader.readAsText(file);
       }
@@ -694,14 +722,24 @@ document.addEventListener('DOMContentLoaded', function() {
           await loadDiagram(xmlContent, viewer, canvas);
         } catch (e) {
           console.error('Failed to load diagram:', e);
-          msg.textContent = 'Parse error: ' + e.message;
-          fileState.reset();
+          msg.textContent = translations[currentLang]['message.parseError'] + e.message;
+          msg.className = 'mt-2 text-danger';
+          fileState.reset({
+            clearSelection: false,
+            clearMessage: false,
+            disableLoad: false
+          });
         }
       };
       
       reader.onerror = () => {
         msg.textContent = translations[currentLang]['message.parseError'] + 'Failed to read file';
-        fileState.reset();
+        msg.className = 'mt-2 text-danger';
+        fileState.reset({
+          clearSelection: false,
+          clearMessage: false,
+          disableLoad: false
+        });
       };
       
       reader.readAsText(fileState.selectedFile);
