@@ -326,7 +326,18 @@ async function loadDiagram(xml, viewer, canvas) {
     // Auto-adjust view to fit content
     try {
       if (typeof canvas.zoom === 'function') {
-        canvas.zoom('fit-viewport');
+        // Delay slightly to ensure DOM is updated
+        setTimeout(() => {
+          canvas.zoom('fit-viewport');
+          // Add a small margin after fitting
+          const viewbox = canvas.viewbox();
+          canvas.viewbox({
+            x: viewbox.x - 20,
+            y: viewbox.y - 20,
+            width: viewbox.width + 40,
+            height: viewbox.height + 40
+          });
+        }, 100);
       }
     } catch (e) {
       console.warn('Auto zoom failed:', e);
