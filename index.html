@@ -503,6 +503,24 @@
       width: 0;
     }
 
+    /* Custom File Upload Button */
+    .custom-file-upload {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    [data-theme="dark"] .custom-file-upload {
+      color: var(--text-color);
+      border-color: var(--border-color);
+    }
+    
+    [data-theme="dark"] .custom-file-upload:hover {
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+    }
+
     [data-theme="dark"] .djs-container svg defs marker path {
       fill: #e0e0e0 !important;
     }
@@ -534,6 +552,34 @@
       z-index: 9999;
       display: flex;
       flex-direction: column;
+    }
+
+    /* Drop Overlay for Drag & Drop */
+    .drop-overlay {
+      position: fixed;
+      top: 0; 
+      left: 0; 
+      width: 100vw; 
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10000;
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      color: white;
+      transition: opacity 0.3s ease;
+      pointer-events: none; /* Let events pass through to document when active */
+    }
+    .drop-overlay.d-none { 
+      opacity: 0;
+    }
+    .drop-message {
+      text-align: center;
+      border: 3px dashed white;
+      border-radius: 20px;
+      padding: 4rem;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px);
     }
 
     .fullscreen-overlay .card {
@@ -623,6 +669,13 @@
   </style>
 </head>
 <body class="d-flex flex-column min-vh-100">
+  <div id="dropOverlay" class="drop-overlay d-none">
+    <div class="drop-message">
+      <i class="fas fa-cloud-upload-alt fa-4x mb-3"></i>
+      <h2 data-i18n="actions.dropFile">Drop BPMN/XML file here</h2>
+    </div>
+  </div>
+
   <nav class="navbar navbar-expand-lg navbar-light">
     <div class="container-fluid">
       <a class="navbar-brand" href="#">
@@ -649,7 +702,10 @@
           <div class="card-header d-flex justify-content-between align-items-center">
             <span data-i18n="editor.title">XML Editor</span>
             <div class="d-flex align-items-center">
-              <button class="btn btn-sm btn-outline-secondary me-2" id="xmlFullscreenBtn" title="Fullscreen">
+              <button class="btn btn-sm btn-outline-primary me-2" id="syncEditorBtn" title="Sync to Canvas" data-i18n-title="actions.syncCanvas">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary me-2" id="xmlFullscreenBtn" title="Fullscreen" data-i18n-title="actions.fullscreen">
                 <i class="fas fa-expand"></i>
               </button>
               <div class="form-check form-switch">
@@ -668,9 +724,13 @@
             <div class="mb-3">
               <div class="form-label" data-i18n="actions.select">Select BPMN file</div>
               <div class="mb-2">
-                <input class="form-control" type="file" id="fileInput" data-i18n-placeholder="actions.select">
+                <label for="fileInput" class="btn btn-outline-secondary w-100 mb-0 custom-file-upload">
+                  <i class="fas fa-folder-open me-2"></i>
+                  <span data-i18n="actions.selectFileButton">Choose file</span>
+                </label>
+                <input class="d-none" type="file" id="fileInput" accept=".bpmn,.xml">
               </div>
-              <div class="small mb-2" id="fileStatus">未选择文件</div>
+              <div class="small mb-2 text-center" id="fileStatus" data-i18n="actions.noFileChosen">No file chosen</div>
               <button class="btn btn-outline-secondary w-100" type="button" id="loadBtn" data-i18n="actions.load">
                 <i class="fas fa-upload me-1"></i>
                 <span>Load & Validate</span>
@@ -695,20 +755,20 @@
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center">
             <span data-i18n="diagram.title">Diagram Preview</span>
-            <button class="btn btn-sm btn-outline-secondary" id="diagramFullscreenBtn" title="Fullscreen">
+            <button class="btn btn-sm btn-outline-secondary" id="canvasFullscreenBtn" title="Fullscreen" data-i18n-title="actions.fullscreen">
               <i class="fas fa-expand"></i>
             </button>
           </div>
-          <div class="card-body position-relative">
+          <div class="card-body p-0 position-relative">
             <div class="zoom-controls">
-              <button class="btn btn-sm zoom-in" title="Zoom In">
-                <i class="fas fa-search-plus"></i>
+              <button class="btn btn-sm zoom-in" title="Zoom In" data-i18n-title="actions.zoomIn">
+                <i class="fas fa-plus"></i>
               </button>
-              <button class="btn btn-sm zoom-out" title="Zoom Out">
-                <i class="fas fa-search-minus"></i>
+              <button class="btn btn-sm zoom-reset" title="Fit to Viewport" data-i18n-title="actions.zoomReset">
+                <i class="fas fa-compress-arrows-alt"></i>
               </button>
-              <button class="btn btn-sm zoom-reset" title="Reset View">
-                <i class="fas fa-expand"></i>
+              <button class="btn btn-sm zoom-out" title="Zoom Out" data-i18n-title="actions.zoomOut">
+                <i class="fas fa-minus"></i>
               </button>
             </div>
             <div id="canvas"></div>

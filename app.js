@@ -20,7 +20,14 @@ const translations = {
     'message.invalidBPMN': 'Invalid BPMN 2.0 format: ',
     'message.parseError': 'Parse error: ',
     'message.exportSvgError': 'SVG export failed: ',
-    'message.exportPngError': 'PNG export failed: '
+    'message.exportPngError': 'PNG export failed: ',
+    'actions.dropFile': 'Drop BPMN/XML file here',
+    'actions.syncCanvas': 'Sync to Canvas',
+    'actions.fullscreen': 'Fullscreen',
+    'actions.exitFullscreen': 'Exit Fullscreen',
+    'actions.zoomIn': 'Zoom In',
+    'actions.zoomOut': 'Zoom Out',
+    'actions.zoomReset': 'Fit to Viewport'
   },
   zh: {
     'app.title': 'BPMN 查看器',
@@ -42,7 +49,14 @@ const translations = {
     'message.invalidBPMN': 'BPMN 2.0 格式无效：',
     'message.parseError': '解析失败：',
     'message.exportSvgError': '导出SVG失败：',
-    'message.exportPngError': '导出PNG失败：'
+    'message.exportPngError': '导出PNG失败：',
+    'actions.dropFile': '拖拽 BPMN/XML 文件到此处',
+    'actions.syncCanvas': '同步到画布',
+    'actions.fullscreen': '全屏',
+    'actions.exitFullscreen': '退出全屏',
+    'actions.zoomIn': '放大',
+    'actions.zoomOut': '缩小',
+    'actions.zoomReset': '自适应视口'
   }
 };
 
@@ -143,10 +157,37 @@ function setTheme(theme) {
 
 // Language management
 function setLanguage(lang) {
+  // Update inner text
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
-    if (translations[lang][key]) {
+    if (translations[lang] && translations[lang][key]) {
+      // Special check for file status to not overwrite selected file name
+      if (el.id === 'fileStatus' && fileState.selectedFile) {
+        return;
+      }
       el.textContent = translations[lang][key];
+    }
+  });
+
+  // Update title attributes
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (translations[lang] && translations[lang][key]) {
+      // Special handling for fullscreen buttons to respect their current state
+      if ((el.id === 'xmlFullscreenBtn' || el.id === 'canvasFullscreenBtn') && 
+          el.closest('.card').classList.contains('fullscreen-overlay')) {
+        el.setAttribute('title', translations[lang]['actions.exitFullscreen']);
+      } else {
+        el.setAttribute('title', translations[lang][key]);
+      }
+    }
+  });
+  
+  // Update placeholder attributes
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (translations[lang] && translations[lang][key]) {
+      el.setAttribute('placeholder', translations[lang][key]);
     }
   });
 
@@ -316,6 +357,13 @@ async function loadDiagram(xml, viewer, canvas) {
     // Reset file state after successful load
     fileState.reset();
     
+    // Save to local storage for workspace memory
+    try {
+      localStorage.setItem('bpmn-viewer-last-content', xml);
+    } catch (e) {
+      console.warn('Failed to save to local storage (file might be too large):', e);
+    }
+    
     // Adjust lane labels
     setTimeout(adjustLaneLabels, 200);
     setTimeout(adjustLaneLabels, 500);
@@ -388,6 +436,15 @@ document.addEventListener('DOMContentLoaded', function() {
   // Get necessary modules
   const canvas = viewer.get('canvas');
   const eventBus = viewer.get('eventBus');
+
+  // Load last saved content if available
+  const lastContent = localStorage.getItem('bpmn-viewer-last-content');
+  if (lastContent) {
+    loadDiagram(lastContent, viewer, canvas).catch(e => {
+      console.warn('Failed to load previous workspace:', e);
+      localStorage.removeItem('bpmn-viewer-last-content');
+    });
+  }
   
   // Add manual drag support
   let isDragging = false;
@@ -395,6 +452,39 @@ document.addEventListener('DOMContentLoaded', function() {
   let lastY = 0;
   
   const canvasElement = document.getElementById('canvas');
+  
+  // Keyboard Shortcuts
+  document.addEventListener('keydown', (e) => {
+    // Only trigger if we are not typing in the XML editor
+    if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
+      return;
+    }
+
+    // '+' or '=' to Zoom In
+    if (e.key === '+' || e.key === '=') {
+      try { canvas.zoom(canvas.zoom() + 0.1); } catch (err) {}
+    }
+    // '-' or '_' to Zoom Out
+    else if (e.key === '-' || e.key === '_') {
+      try { canvas.zoom(canvas.zoom() - 0.1); } catch (err) {}
+    }
+    // '0' or 'f' to Fit to viewport
+    else if (e.key === '0' || e.key.toLowerCase() === 'f') {
+      try { canvas.zoom('fit-viewport'); } catch (err) {}
+    }
+    // 'Esc' to exit fullscreen
+    else if (e.key === 'Escape') {
+      const xmlContainer = document.getElementById('xmlEditor').closest('.card');
+      const canvasContainer = document.getElementById('canvas').closest('.card');
+      
+      if (xmlContainer.classList.contains('fullscreen-overlay')) {
+        toggleFullscreen('xmlEditor', 'xmlFullscreenBtn');
+      }
+      if (canvasContainer.classList.contains('fullscreen-overlay')) {
+        toggleFullscreen('canvas', 'canvasFullscreenBtn');
+      }
+    }
+  });
   
   canvasElement.addEventListener('mousedown', function(e) {
     isDragging = true;
@@ -429,6 +519,35 @@ document.addEventListener('DOMContentLoaded', function() {
     isDragging = false;
     canvasElement.style.cursor = 'grab';
   });
+
+  // Add mouse wheel zoom support
+  canvasElement.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    try {
+      if (typeof canvas.zoom === 'function') {
+        // Calculate zoom step based on scroll direction
+        const zoomStep = e.deltaY > 0 ? -0.1 : 0.1;
+        
+        // Get current zoom level
+        const currentZoom = canvas.zoom();
+        
+        // Calculate target zoom, limiting between 0.2 and 5.0
+        let targetZoom = currentZoom + zoomStep;
+        targetZoom = Math.max(0.2, Math.min(targetZoom, 5.0));
+        
+        // Apply zoom using cursor position as center
+        const rect = canvasElement.getBoundingClientRect();
+        const position = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+        
+        canvas.zoom(targetZoom, position);
+      }
+    } catch (err) {
+      console.warn('Wheel zoom failed:', err);
+    }
+  }, { passive: false });
 
   // Add zoom button events
   document.querySelector('.zoom-in').addEventListener('click', () => {
@@ -492,6 +611,63 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // Drag and drop file support
+  const dropOverlay = document.getElementById('dropOverlay');
+  
+  if (dropOverlay) {
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      // Only show overlay if it's a file drag
+      if (e.dataTransfer.types.includes('Files')) {
+        dropOverlay.classList.remove('d-none');
+      }
+    });
+    
+    window.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      if (e.target === dropOverlay) {
+        dropOverlay.classList.add('d-none');
+      }
+    });
+    
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropOverlay.classList.add('d-none');
+      
+      if (e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        
+        fileState.selectedFile = file;
+        const fileStatus = document.getElementById('fileStatus');
+        if (fileStatus) fileStatus.textContent = file.name;
+        if (loadBtn) loadBtn.disabled = false;
+        
+        // Auto-load if dropped
+        const currentLang = localStorage.getItem('bpmn-viewer-language') || 'en';
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            let xmlContent = reader.result;
+            if (xmlContent.includes('getProcessResponse') || xmlContent.includes('_tns_:')) {
+              const definitionsMatch = xmlContent.match(/<definitions[\s\S]*?<\/definitions>/i);
+              if (definitionsMatch) xmlContent = definitionsMatch[0];
+            }
+            await loadDiagram(xmlContent, viewer, canvas);
+          } catch (err) {
+            console.error('Failed to load diagram:', err);
+            msg.textContent = 'Parse error: ' + err.message;
+            fileState.reset();
+          }
+        };
+        reader.onerror = () => {
+          msg.textContent = translations[currentLang]['message.parseError'] + 'Failed to read file';
+          fileState.reset();
+        };
+        reader.readAsText(file);
+      }
+    });
+  }
   
   // Load button click handler
   if (loadBtn) {
@@ -534,6 +710,28 @@ document.addEventListener('DOMContentLoaded', function() {
       };
       
       reader.readAsText(fileState.selectedFile);
+    });
+  }
+
+  // Sync Editor to Canvas button handler
+  const syncEditorBtn = document.getElementById('syncEditorBtn');
+  if (syncEditorBtn) {
+    syncEditorBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      const currentLang = localStorage.getItem('bpmn-viewer-language') || 'en';
+      const xml = xmlEditor.getValue();
+      
+      if (!xml || xml.trim() === '') {
+        msg.textContent = translations[currentLang]['message.invalidBPMN'] + 'Empty content';
+        return;
+      }
+
+      try {
+        await loadDiagram(xml, viewer, canvas);
+      } catch (e) {
+        console.error('Failed to sync diagram:', e);
+        msg.textContent = 'Sync error: ' + e.message;
+      }
     });
   }
 
@@ -595,16 +793,67 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
     setTheme(currentTheme === 'light' ? 'dark' : 'light');
   });
+
+  // Fullscreen Handlers
+  window.toggleFullscreen = function(elementId, btnId) {
+    const container = document.getElementById(elementId).closest('.card');
+    const btn = document.getElementById(btnId);
+    const icon = btn.querySelector('i');
+    const currentLang = document.documentElement.lang || 'en';
+    
+    if (container.classList.contains('fullscreen-overlay')) {
+      container.classList.remove('fullscreen-overlay');
+      icon.classList.remove('fa-compress');
+      icon.classList.add('fa-expand');
+      btn.setAttribute('title', translations[currentLang]['actions.fullscreen']);
+      btn.setAttribute('data-i18n-title', 'actions.fullscreen');
+    } else {
+      container.classList.add('fullscreen-overlay');
+      icon.classList.remove('fa-expand');
+      icon.classList.add('fa-compress');
+      btn.setAttribute('title', translations[currentLang]['actions.exitFullscreen']);
+      btn.setAttribute('data-i18n-title', 'actions.exitFullscreen');
+    }
+    
+    // Resize Ace Editor or BPMN Canvas if needed
+    if (elementId === 'xmlEditor') {
+      xmlEditor.resize();
+    } else if (elementId === 'canvas') {
+      try {
+        if (typeof canvas.zoom === 'function') {
+          setTimeout(() => canvas.zoom('fit-viewport'), 50);
+        }
+      } catch (e) {}
+    }
+  }
+
+  const xmlFullscreenBtn = document.getElementById('xmlFullscreenBtn');
+  if (xmlFullscreenBtn) {
+    xmlFullscreenBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleFullscreen('xmlEditor', 'xmlFullscreenBtn');
+    });
+  }
+
+  const canvasFullscreenBtn = document.getElementById('canvasFullscreenBtn');
+  if (canvasFullscreenBtn) {
+    canvasFullscreenBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleFullscreen('canvas', 'canvasFullscreenBtn');
+    });
+  }
   
   // Syntax highlighting toggle
-  document.getElementById('syntaxHighlightToggle').addEventListener('change', (e) => {
-    if (e.target.checked) {
-      xmlEditor.setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 
-                         'ace/theme/tomorrow_night' : 'ace/theme/github');
-    } else {
-      xmlEditor.setTheme('ace/theme/textmate');
-    }
-  });
+  const syntaxHighlightToggle = document.getElementById('syntaxHighlightToggle');
+  if (syntaxHighlightToggle) {
+    syntaxHighlightToggle.addEventListener('change', function() {
+      if (this.checked) {
+        xmlEditor.session.setMode('ace/mode/xml');
+      } else {
+        xmlEditor.session.setMode('ace/mode/text');
+      }
+    });
+  }
   
   // Listen to events to adjust lane labels
   eventBus.on(['shape.added', 'shape.changed', 'render.shape'], function(event) {
@@ -628,86 +877,4 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(adjustLaneLabels, 50);
   });
 
-  // Fullscreen functionality
-  const xmlFullscreenBtn = document.getElementById('xmlFullscreenBtn');
-  const diagramFullscreenBtn = document.getElementById('diagramFullscreenBtn');
-
-  // XML Editor fullscreen
-  xmlFullscreenBtn.addEventListener('click', () => {
-    const xmlEditorCard = xmlFullscreenBtn.closest('.card');
-    toggleFullscreen(xmlEditorCard, 'xml');
-  });
-
-  // Diagram fullscreen
-  diagramFullscreenBtn.addEventListener('click', () => {
-    const diagramCard = diagramFullscreenBtn.closest('.card');
-    toggleFullscreen(diagramCard, 'diagram');
-  });
-
-  function toggleFullscreen(element, type) {
-    const existingOverlay = document.querySelector('.fullscreen-overlay');
-    
-    if (existingOverlay) {
-      // Exit fullscreen
-      const originalParent = existingOverlay.originalParent;
-      const originalNextSibling = existingOverlay.originalNextSibling;
-      
-      if (originalNextSibling) {
-        originalParent.insertBefore(element, originalNextSibling);
-      } else {
-        originalParent.appendChild(element);
-      }
-      
-      document.body.removeChild(existingOverlay);
-      
-      // Update button icon
-      const btn = type === 'xml' ? xmlFullscreenBtn : diagramFullscreenBtn;
-      btn.innerHTML = '<i class="fas fa-expand"></i>';
-      
-      // Resize editor/viewer
-      setTimeout(() => {
-        if (type === 'xml') {
-          xmlEditor.resize();
-        } else {
-          if (canvas && canvas.zoom) {
-            canvas.zoom('fit-viewport');
-          }
-        }
-      }, 200);
-    } else {
-      // Enter fullscreen
-      const overlay = document.createElement('div');
-      overlay.className = 'fullscreen-overlay';
-      overlay.originalParent = element.parentNode;
-      overlay.originalNextSibling = element.nextSibling;
-      
-      // Move element to fullscreen
-      overlay.appendChild(element);
-      document.body.appendChild(overlay);
-      
-      // Update button icon
-      const btn = type === 'xml' ? xmlFullscreenBtn : diagramFullscreenBtn;
-      btn.innerHTML = '<i class="fas fa-compress"></i>';
-      
-      // Add ESC key listener
-      const handleEscape = (e) => {
-        if (e.key === 'Escape') {
-          toggleFullscreen(element, type);
-          document.removeEventListener('keydown', handleEscape);
-        }
-      };
-      document.addEventListener('keydown', handleEscape);
-      
-      // Resize editor/viewer
-      setTimeout(() => {
-        if (type === 'xml') {
-          xmlEditor.resize();
-        } else {
-          if (canvas && canvas.zoom) {
-            canvas.zoom('fit-viewport');
-          }
-        }
-      }, 200);
-    }
-  }
 }); 
